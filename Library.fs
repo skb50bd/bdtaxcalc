@@ -1,7 +1,6 @@
 ﻿module Model
 
 open System
-open System.Collections.Generic
 
 type TaxCalculationError =
 | NegativeIncome
@@ -16,24 +15,33 @@ let inline private (|-|) a b =
 let ``%`` (a: decimal) (b: decimal) = b * (a / 100m)
 
 let config = {|
-    TaxFreeIncome                      = {|
+    TaxFreeIncome = {|
         Male   = 3_00_000m
         Female = 4_00_000m
     |}
-    MaxHouseRentExemptionPerYear       = 3_00_000m
-    MaxMedicalExemptionPerYear         = 1_20_000m
-    MaxConveyanceExemptionPerYear      = 30_000m
-    TaxBracketWidths                   = {|
-        First  = 1_00_000m
-        Second = 3_00_000m
-        Third  = 4_00_000m
-        Forth  = 5_00_000m
-        Fifth  = Decimal.MaxValue
-    |}
-    MaxRebateOnDeposit           = 60_000m
-    InvestableIncomePercentage   = 30m |> ``%``
-    RebateOnMaxAllowedInvestment = 15m |> ``%``
+    YearlyHouseRentExemption  = 3_00_000m
+    YearlyMedicalExemption    = 1_20_000m
+    YearlyConveyanceExemption = 30_000m
+    TaxBrackets               = [
+        (1_00_000m,         5m |> ``%``)
+        (3_00_000m,        10m |> ``%``)
+        (4_00_000m,        15m |> ``%``)
+        (5_00_000m,        20m |> ``%``)
+        (Decimal.MaxValue, 25m |> ``%``)
+    ]
+    RebateOnDeposit            = 60_000m
+    InvestableIncomePercentage = 30m |> ``%``
+    RebateOnAllowedInvestment  = 15m |> ``%``
 |}
+
+type private TaxBracket = {
+    Width         : decimal
+    PercentageFunc: decimal -> decimal
+}
+
+let private BdTaxBrackets =
+    config.TaxBrackets
+    |> List.map (fun (w, p) -> { Width = w; PercentageFunc = p })
 
 type Gender =
 | Male
@@ -85,27 +93,21 @@ let private mapTaxOutput = function
 let private houseRentExemption basic houseRent =
     basic
     |> (50m |> ``%``)
-    |> min config.MaxHouseRentExemptionPerYear
+    |> min config.YearlyHouseRentExemption
     |> min houseRent
 
 let private medicalAllowanceExemption basic medicalAllowance =
     basic
     |> (10m |> ``%``)
-    |> min config.MaxMedicalExemptionPerYear
+    |> min config.YearlyMedicalExemption
     |> min medicalAllowance
 
 let private conveyanceExemption conveyance =
-    min conveyance config.MaxConveyanceExemptionPerYear
+    min conveyance config.YearlyConveyanceExemption
 
 let private taxFreeIncome = function
 | Male   -> config.TaxFreeIncome.Male
 | Female -> config.TaxFreeIncome.Female
-
-type IReadOnlyDictionary<'TKey, 'TValue> with
-    member this.GetOrDefault (key: 'TKey) (defaultValue: 'TValue) =
-        match this.ContainsKey key with
-        | true  -> this.Item key
-        | false -> defaultValue
         
 let private getTaxableIncome (income: list<Income>) =
     let summedIncome = 
@@ -121,7 +123,9 @@ let private getTaxableIncome (income: list<Income>) =
         |> readOnlyDict 
     
     let getOrZero incomeType =
-        summedIncome.GetOrDefault incomeType 0m
+        match summedIncome.ContainsKey incomeType with
+        | true  -> summedIncome.Item incomeType
+        | false -> 0m
     
     let basic      = Basic              |> getOrZero
     let houseRent  = HouseRentAllowance |> getOrZero
@@ -134,20 +138,6 @@ let private getTaxableIncome (income: list<Income>) =
     + medical    |-| (medicalAllowanceExemption basic medical)
     + conveyance |-| (conveyanceExemption conveyance)
     + bonus
-
-type private TaxBracket = {
-    Width         : decimal
-    PercentageFunc: decimal -> decimal
-}
-
-let private BdTaxBrackets =
-    [
-        { Width = config.TaxBracketWidths.First;  PercentageFunc =  5m |> ``%`` }
-        { Width = config.TaxBracketWidths.Second; PercentageFunc = 10m |> ``%`` }
-        { Width = config.TaxBracketWidths.Third;  PercentageFunc = 15m |> ``%`` }
-        { Width = config.TaxBracketWidths.Forth;  PercentageFunc = 20m |> ``%`` }
-        { Width = config.TaxBracketWidths.Fifth;  PercentageFunc = 25m |> ``%`` }
-    ]
 
 let private calcTaxBeforeRebate taxableIncome =
     ((taxableIncome, 0m), BdTaxBrackets)
@@ -173,10 +163,10 @@ let private rebateOnInvestment (investments: list<Investment>) taxableIncome =
         )
     |> fun (bond, deposits) ->
         deposits
-        |> min config.MaxRebateOnDeposit
+        |> min config.RebateOnDeposit
         |> (+) bond
     |> min (taxableIncome |> config.InvestableIncomePercentage)
-    |> config.RebateOnMaxAllowedInvestment
+    |> config.RebateOnAllowedInvestment
 
 let private applyRebate taxableIncome (investments: list<Investment>) taxAmount =
     taxAmount - (rebateOnInvestment investments taxableIncome)
@@ -224,16 +214,16 @@ let calculateTax
                 Gender = gender
 
                 Income = [
-                    { Amount = basicIncome;         Type = Basic }
+                    { Amount = basicIncome;         Type = Basic              }
                     { Amount = houseRentAllowance;  Type = HouseRentAllowance }
-                    { Amount = medicalAllowance;    Type = MedicalAllowance }
-                    { Amount = conveyance;          Type = Conveyance }
-                    { Amount = bonus;               Type = Bonus }
+                    { Amount = medicalAllowance;    Type = MedicalAllowance   }
+                    { Amount = conveyance;          Type = Conveyance         }
+                    { Amount = bonus;               Type = Bonus              }
                 ]
 
                 Investments = [
                     { Amount = savingsBond; Type = SavingsBond }
-                    { Amount = deposit;     Type = Deposit }
+                    { Amount = deposit;     Type = Deposit     }
                 ]
 
                 MinimumTaxInArea = minimumTaxInArea
