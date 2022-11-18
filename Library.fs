@@ -2,17 +2,12 @@
 
 open System
 
-type TaxCalculationError =
-| NegativeIncome
-| NegativeInvestment
-| NegativeAit
-
 let inline private (|-|) a b =
     match a > b with
     | true  -> a - b
     | false -> 0m
 
-let ``%`` (a: decimal) (b: decimal) = b * (a / 100m)
+let ``%`` a b = b * (a / 100m)
 
 let config = {|
     TaxFreeIncome = {|
@@ -47,7 +42,7 @@ type Gender =
 | Male
 | Female
 
-type private IncomeType =
+type IncomeType =
 | Basic
 | MedicalAllowance
 | HouseRentAllowance
@@ -59,7 +54,7 @@ type private Income = {
     Type  :IncomeType
 }
 
-type private InvestmentType =
+type InvestmentType =
 | SavingsBond
 | Deposit
 
@@ -71,12 +66,17 @@ type private Investment = {
 type private AIT =
 | AIT of decimal
 
+type TaxCalculationError =
+| NegativeIncome     of IncomeType * decimal 
+| NegativeInvestment of InvestmentType * decimal 
+| NegativeAit        of decimal
+
 type private TaxInput = {
     Gender:           Gender
     Income:           list<Income>
     Investments:      list<Investment>
     MinimumTaxInArea: decimal
-    MaybeAIT:         option<AIT>
+    MaybeAIT:         AIT
 }
 
 type TaxOutput =
@@ -171,10 +171,9 @@ let private rebateOnInvestment (investments: list<Investment>) taxableIncome =
 let private applyRebate taxableIncome (investments: list<Investment>) taxAmount =
     taxAmount - (rebateOnInvestment investments taxableIncome)
 
-let private applyAIT maybeAIT taxAmount =
-    match maybeAIT with
-    | Some (AIT ait) -> taxAmount - ait
-    | None           -> taxAmount
+let private applyAIT ait taxAmount =
+    match ait with
+    | AIT ait -> taxAmount - ait
 
 let private calcTaxAfterRebate (investments: list<Investment>) taxableIncome =
     taxableIncome
@@ -192,6 +191,27 @@ let private calcTax taxInput =
     |> applyAIT taxInput.MaybeAIT
     |> mapTaxOutput
 
+let validateIncome incomeType income =
+    match income < 0m with
+    | true  -> Ok ()
+    | false -> (incomeType, income) |> NegativeIncome |> Error
+
+let validateInvestment investmentType investment =
+    match investment < 0m with
+    | true  ->  Ok ()
+    | false -> (investmentType, investment) |> NegativeInvestment |> Error
+
+let validateAit ait =
+    match ait with
+    | 0m              -> Ok ()
+    | _ when ait > 0m -> Ok ()
+    | _               -> ait |> NegativeAit |> Error
+
+let (>=>) switch1 switch2 =
+    match switch1 with
+    | Ok _      -> switch2 
+    | Error err -> Error err
+    
 let calculateTax
         (gender:             Gender)
         (minimumTaxInArea:   decimal)
@@ -204,12 +224,16 @@ let calculateTax
         (deposit:            decimal)
         (ait:                decimal)
         : Result<TaxOutput, TaxCalculationError> =
-    match ait with
-    | 0m              -> None |> Ok
-    | _ when ait > 0m -> ait |> AIT |> Some |> Ok
-    | _               -> TaxCalculationError.NegativeAit |> Error
+    (validateIncome Basic basicIncome)
+    >=> (validateIncome HouseRentAllowance houseRentAllowance)
+    >=> (validateIncome MedicalAllowance medicalAllowance)
+    >=> (validateIncome Conveyance conveyance)
+    >=> (validateIncome Bonus bonus)
+    >=> (validateInvestment SavingsBond savingsBond)
+    >=> (validateInvestment Deposit deposit)
+    >=> (validateAit ait)
     |> Result.map
-        (fun maybeAit ->
+        (fun _ ->
             calcTax {
                 Gender = gender
 
@@ -228,6 +252,6 @@ let calculateTax
 
                 MinimumTaxInArea = minimumTaxInArea
 
-                MaybeAIT = maybeAit
+                MaybeAIT = ait |> AIT
             }
         )
