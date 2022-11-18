@@ -196,27 +196,34 @@ let calculateTax
         (savingsBond:        decimal)
         (deposit:            decimal)
         (ait:                decimal) =
-    calcTax {
-        Gender = gender
 
-        Income = [
-            Income (basicIncome, Basic)
-            Income (houseRentAllowance, HouseRentAllowance)
-            Income (medicalAllowance, MedicalAllowance)
-            Income (conveyance, Conveyance)
-            Income (bonus, Bonus)
-        ]
+    let maybeAitResult =
+        match ait with
+        | 0m                  -> None |> Ok
+        | ait when ait > 0m -> ait |> AIT |> Some |> Ok
+        | _  -> $"Invalid AIT Amount {ait}" |> Error
 
-        Investments = [
-            Investment (savingsBond, SavingsBond)
-            Investment (deposit, Deposit)
-        ]
+    maybeAitResult
+    |> Result.map
+        (fun maybeAit ->
+            calcTax {
+                Gender = gender
 
-        MinimumTaxInArea = minimumTaxInArea
+                Income = [
+                    Income (basicIncome, Basic)
+                    Income (houseRentAllowance, HouseRentAllowance)
+                    Income (medicalAllowance, MedicalAllowance)
+                    Income (conveyance, Conveyance)
+                    Income (bonus, Bonus)
+                ]
 
-        MaybeAIT =
-            match ait with
-            | 0m                  -> None
-            | ait when ait > 0m -> ait |> AIT |> Some
-            | _                   -> failwith $"Incorrect AIT Amount {ait}"
-    }
+                Investments = [
+                    Investment (savingsBond, SavingsBond)
+                    Investment (deposit, Deposit)
+                ]
+
+                MinimumTaxInArea = minimumTaxInArea
+
+                MaybeAIT = maybeAit
+            }
+        )
