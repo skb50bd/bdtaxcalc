@@ -2,6 +2,9 @@
 
 open System
 
+type TaxCalculationError =
+| NegativeAit
+
 let inline private (|-|) a b =
     match a > b with
     | true -> a - b
@@ -185,6 +188,8 @@ let private calcTax taxInput =
     |> applyAIT taxInput.MaybeAIT
     |> mapTaxOutput
 
+
+
 let calculateTax
         (gender:             Gender)
         (minimumTaxInArea:   decimal)
@@ -201,7 +206,7 @@ let calculateTax
         match ait with
         | 0m                  -> None |> Ok
         | ait when ait > 0m -> ait |> AIT |> Some |> Ok
-        | _  -> $"Invalid AIT Amount {ait}" |> Error
+        | _  -> TaxCalculationError.NegativeAit |> Error
 
     maybeAitResult
     |> Result.map
