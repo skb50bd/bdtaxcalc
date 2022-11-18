@@ -2,7 +2,7 @@
 
 open System
 
-let inline (|-|) a b =
+let inline private (|-|) a b =
     match a > b with
     | true -> a - b
     | false -> 0m
@@ -33,25 +33,25 @@ type Gender =
 | Male
 | Female
 
-type IncomeType =
+type private IncomeType =
 | Basic
 | MedicalAllowance
 | HouseRentAllowance
 | Conveyance
 | Bonus
 
-type Income = Income of Amount: decimal * IncomeType
+type private Income = Income of Amount: decimal * IncomeType
 
-type InvestmentType =
+type private InvestmentType =
 | SavingsBond
 | Deposit
 
-type Investment = Investment of Amount: decimal * InvestmentType
+type private Investment = Investment of Amount: decimal * InvestmentType
 
-type AIT =
+type private AIT =
 | AIT of decimal
 
-type TaxInput = {
+type private TaxInput = {
     Gender:           Gender
     Income:           list<Income>
     Investments:      list<Investment>
@@ -64,32 +64,32 @@ type TaxOutput =
 | Liability  of decimal
 | Refundable of decimal
 
-let mapTaxOutput taxAmount =
+let private mapTaxOutput taxAmount =
     match taxAmount with
     | 0m -> Zero
     | amount when amount > 0m -> taxAmount |> Liability
     | amount when amount < 0m -> taxAmount |> Refundable
     | _ -> failwith "Unreachable"
 
-let houseRentExemption basic houseRent =
+let private houseRentExemption basic houseRent =
     basic
     |> (50m |> ``%``)
     |> min config.MaxHouseRentExemptionPerYear
     |> min houseRent
 
-let medicalAllowanceExemption basic medicalAllowance =
+let private medicalAllowanceExemption basic medicalAllowance =
     basic
     |> (10m |> ``%``)
     |> min config.MaxMedicalExemptionPerYear
     |> min medicalAllowance
 
-let conveyanceExemption conveyance = min conveyance config.MaxConveyanceExemptionPerYear
+let private conveyanceExemption conveyance = min conveyance config.MaxConveyanceExemptionPerYear
 
-let taxFreeIncome = function
+let private taxFreeIncome = function
 | Male   -> config.TaxFreeIncome.Male
 | Female -> config.TaxFreeIncome.Female
 
-let getTaxableIncome (income: List<Income>) =
+let private getTaxableIncome (income: List<Income>) =
     let basic, houseRent, medical, conveyance, bonus =
         ((0m, 0m, 0m, 0m, 0m), income)
         ||> List.fold
@@ -117,10 +117,10 @@ let getTaxableIncome (income: List<Income>) =
     + conveyance |-| (conveyanceExemption conveyance)
     + bonus
 
-type TaxBracket =
+type private TaxBracket =
 | TaxBracket of bracketWidth: decimal * percentFunc: (decimal -> decimal)
 
-let BdTaxBrackets =
+let private BdTaxBrackets =
     [
         (config.TaxBracketWidths.First,  5m |> ``%``)
         (config.TaxBracketWidths.Second, 10m |> ``%``)
@@ -130,7 +130,7 @@ let BdTaxBrackets =
     ]
     |> List.map TaxBracket
 
-let calcTaxBeforeRebate taxableIncome =
+let private calcTaxBeforeRebate taxableIncome =
     ((taxableIncome, 0m), BdTaxBrackets)
     ||> List.fold
         (fun (income, taxAmount) ->
@@ -146,7 +146,7 @@ let calcTaxBeforeRebate taxableIncome =
         )
     |> snd
 
-let rebateOnInvestment (investments: List<Investment>) taxableIncome =
+let private rebateOnInvestment (investments: List<Investment>) taxableIncome =
     ((0m, 0m), investments)
     ||> List.fold
         (fun (bond, deposit) ->
@@ -161,23 +161,23 @@ let rebateOnInvestment (investments: List<Investment>) taxableIncome =
     |> min (taxableIncome |> config.InvestableIncomePercentage)
     |> config.RebateOnMaxAllowedInvestment
 
-let applyRebate taxableIncome (investments: List<Investment>) taxAmount =
+let private applyRebate taxableIncome (investments: List<Investment>) taxAmount =
     taxAmount - (rebateOnInvestment investments taxableIncome)
 
-let applyAIT maybeAIT taxAmount =
+let private applyAIT maybeAIT taxAmount =
     match maybeAIT with
     | Some (AIT ait) -> taxAmount - ait
     | None           -> taxAmount
 
-let calcTaxAfterRebate (investments: List<Investment>) taxableIncome =
+let private calcTaxAfterRebate (investments: List<Investment>) taxableIncome =
     taxableIncome
     |> calcTaxBeforeRebate
     |> applyRebate taxableIncome investments
 
-let subtractTaxFreeIncome gender taxableIncome =
+let private subtractTaxFreeIncome gender taxableIncome =
     taxableIncome |-| (taxFreeIncome gender)
 
-let calcTax taxInput =
+let private calcTax taxInput =
     taxInput.Income
     |> getTaxableIncome
     |> subtractTaxFreeIncome taxInput.Gender
