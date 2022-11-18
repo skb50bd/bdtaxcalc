@@ -220,7 +220,7 @@ let validateAit ait =
     
 let (>=>) switch1 switch2 =
     match switch1 with
-    | Ok _      -> Ok switch2 
+    | Ok _      -> switch2 
     | Error err -> Error err
     
 let calculateTax
@@ -243,25 +243,27 @@ let calculateTax
     >=> (validateInvestment SavingsBond savingsBond)
     >=> (validateInvestment Deposit deposit)
     >=> (validateAit ait)
-    >=> ({
-            Gender = gender
+    >=> (
+            {
+                Gender = gender
 
-            Income = [
-                { Amount = basicIncome;         Type = Basic              }
-                { Amount = houseRentAllowance;  Type = HouseRentAllowance }
-                { Amount = medicalAllowance;    Type = MedicalAllowance   }
-                { Amount = conveyance;          Type = Conveyance         }
-                { Amount = bonus;               Type = Bonus              }
-            ]
+                Income = [
+                    { Amount = basicIncome;         Type = Basic              }
+                    { Amount = houseRentAllowance;  Type = HouseRentAllowance }
+                    { Amount = medicalAllowance;    Type = MedicalAllowance   }
+                    { Amount = conveyance;          Type = Conveyance         }
+                    { Amount = bonus;               Type = Bonus              }
+                ]
 
-            Investments = [
-                { Amount = savingsBond; Type = SavingsBond }
-                { Amount = deposit;     Type = Deposit     }
-            ]
+                Investments = [
+                    { Amount = savingsBond; Type = SavingsBond }
+                    { Amount = deposit;     Type = Deposit     }
+                ]
 
-            MinimumTaxInArea = minimumTaxInArea
+                MinimumTaxInArea = minimumTaxInArea
 
-            MaybeAIT = ait |> AIT
-        }
-        |> calcTax
+                MaybeAIT = ait |> AIT
+            }
+            |> calcTax
+            |> Ok
     )
