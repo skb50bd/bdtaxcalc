@@ -27,7 +27,7 @@ let config = {|
     
     YearlyConveyanceExemption = 30_000m
     
-    TaxBrackets = [
+    Slabs = [
         (1_00_000m,         5m |> ``%``)
         (3_00_000m,        10m |> ``%``)
         (4_00_000m,        15m |> ``%``)
@@ -36,18 +36,18 @@ let config = {|
     ]
     
     RebateOnDeposit            = 60_000m
-    InvestableIncomePercentage = 30m |> ``%``
+    InvestableIncomePercentage = 25m |> ``%``
     RebateOnAllowedInvestment  = 15m |> ``%``
 |}
 
-type private TaxBracket = {
-    Width     : decimal
-    Percentage: decimal -> decimal
+type private Slab = {
+    Width: decimal
+    Rate:  decimal -> decimal
 }
 
 let private BdTaxBrackets =
-    config.TaxBrackets
-    |> List.map (fun (w, p) -> { Width = w; Percentage = p })
+    config.Slabs
+    |> List.map (fun (w, r) -> { Width = w; Rate = r })
 
 type Gender =
 | Male
@@ -62,7 +62,7 @@ type IncomeType =
 
 type private Income = {
     Amount: decimal
-    Type  :IncomeType
+    Type  : IncomeType
 }
 
 type InvestmentType =
@@ -153,12 +153,12 @@ let private getTaxableIncome (income: list<Income>) =
 let private calcTaxBeforeRebate taxableIncome =
     ((taxableIncome, 0m), BdTaxBrackets)
     ||> List.fold
-        (fun (income, taxAmount) { Width = width; Percentage = percent } ->
+        (fun (income, taxAmount) { Width = width; Rate = taxRate } ->
             (
                 income |-| width,
                 income
                 |> min width
-                |> percent
+                |> taxRate
                 |> (+) taxAmount
             )
         )
@@ -199,6 +199,7 @@ let private calcTax taxInput =
     |> getTaxableIncome
     |> subtractTaxFreeIncome taxInput.Gender
     |> calcTaxAfterRebate taxInput.Investments
+    |> min taxInput.MinimumTaxInArea
     |> applyAIT taxInput.MaybeAIT
     |> mapTaxOutput
 
@@ -214,10 +215,9 @@ let validateInvestment investmentType investment =
 
 let validateAit ait =
     match ait with
-    | 0m              -> Ok ()
-    | _ when ait > 0m -> Ok ()
-    | _               -> ait |> NegativeAit |> Error
-
+    | _ when ait < 0m -> ait |> NegativeAit |> Error
+    | _               -> Ok ()
+    
 let (>=>) switch1 switch2 =
     match switch1 with
     | Ok _      -> Ok switch2 
