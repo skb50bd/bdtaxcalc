@@ -16,11 +16,31 @@ let ``25%`` = nPercentOf 25m
 let ``30%`` = nPercentOf 30m
 let ``50%`` = nPercentOf 50m
 
+let config = {|
+    TaxFreeIncome                      = {|
+        Male   = 3_00_000m
+        Female = 4_00_000m
+    |}
+    MaxHouseRentExemptionPerYear       = 3_00_000m
+    MaxMedicalExemptionPerYear         = 1_20_000m
+    MaxConveyanceExemptionPerYear      = 30_000m
+    TaxBracketWidths                   = {|
+        First  = 1_00_000m
+        Second = 3_00_000m
+        Third  = 4_00_000m
+        Forth  = 5_00_000m
+        Fifth  = Decimal.MaxValue
+    |}
+    MaxRebateOnDeposit                 = 60_000m
+    InvestableIncomePercentage         = ``30%``
+    RebateOnMaxAllowedInvestment = ``15%``
+|}
+
 type Gender =
 | Male
 | Female
 
-type Particular =
+type Income =
 | Basic              of decimal
 | MedicalAllowance   of decimal
 | HouseRentAllowance of decimal
@@ -36,7 +56,7 @@ type AIT =
 
 type TaxInput = {
     Gender:           Gender
-    Income:           list<Particular>
+    Income:           list<Income>
     Investments:      list<Investment>
     MinimumTaxInArea: decimal
     MaybeAIT:         option<AIT>
@@ -55,20 +75,20 @@ let mapTaxOutput taxAmount =
 let houseRentExemption basic houseRent =
     basic
     |> ``50%``
-    |> min 3_00_000m
+    |> min config.MaxHouseRentExemptionPerYear
     |> min houseRent
 
 let medicalAllowanceExemption basic medicalAllowance =
     basic
     |> ``10%``
-    |> min 1_20_000m
+    |> min config.MaxMedicalExemptionPerYear
     |> min medicalAllowance
 
-let conveyanceExemption conveyance = min conveyance 30_000m
+let conveyanceExemption conveyance = min conveyance config.MaxConveyanceExemptionPerYear
 
 let taxFreeIncome = function
-| Male   -> 3_00_000m
-| Female -> 3_50_000m
+| Male   -> config.TaxFreeIncome.Male
+| Female -> config.TaxFreeIncome.Female
 
 let taxableIncome income =
     let (basic, houseRent, medical, conveyance, bonus) =
@@ -101,13 +121,15 @@ let taxableIncome income =
 type TaxBracket =
 | TaxBracket of bracketWidth: decimal * percentFunc: (decimal -> decimal)
 
-let BdTaxBrackets = [
-    TaxBracket (1_00_000m,        ``05%``)
-    TaxBracket (3_00_000m,        ``10%``)
-    TaxBracket (4_00_000m,        ``15%``)
-    TaxBracket (5_00_000m,        ``20%``)
-    TaxBracket (Decimal.MaxValue, ``25%``)
-]
+let BdTaxBrackets =
+    [
+        (config.TaxBracketWidths.First,  ``05%``)
+        (config.TaxBracketWidths.Second, ``10%``)
+        (config.TaxBracketWidths.Third,  ``15%``)
+        (config.TaxBracketWidths.Forth,  ``20%``)
+        (config.TaxBracketWidths.Fifth,  ``25%``)
+    ]
+    |> List.map TaxBracket
 
 let calcTaxBeforeRebate taxableIncome =
     (((taxableIncome), 0m), BdTaxBrackets)
@@ -131,12 +153,14 @@ let rebateOnInvestment investments taxableIncome =
         (fun (bond, deposit) ->
             function
             | SavingsBond b -> (bond + b, deposit)
-            | Deposit d -> (bond, deposit + d)
+            | Deposit d     -> (bond, deposit + d)
         )
     |> fun (bond, deposits) ->
-        deposits |> min 60_000m |> (+) bond
-    |> min (taxableIncome * 0.3m)
-    |> (*) 0.15m
+        deposits
+        |> min config.MaxRebateOnDeposit
+        |> (+) bond
+    |> min (taxableIncome |> config.InvestableIncomePercentage)
+    |> config.RebateOnMaxAllowedInvestment
 
 let applyRebate taxableIncome investments taxAmount =
     taxAmount - (rebateOnInvestment investments taxableIncome)
@@ -146,14 +170,21 @@ let applyAIT maybeAIT taxAmount =
     | Some (AIT ait) -> taxAmount - ait
     | None           -> taxAmount
 
+let calcTaxAfterRebate investments taxableIncome =
+    taxableIncome
+    |> calcTaxBeforeRebate
+    |> applyRebate taxableIncome investments
+
+let subtractTaxFreeIncome gender taxableIncome =
+    taxableIncome |-| (taxFreeIncome gender)
+
 let taxOutput income investments maybeAIT gender =
-    (taxableIncome income) |-| (taxFreeIncome gender)
-    |> fun taxableIncome ->
-        taxableIncome
-        |> calcTaxBeforeRebate
-        |> applyRebate taxableIncome investments
-        |> applyAIT maybeAIT
-        |> mapTaxOutput
+    income
+    |> taxableIncome
+    |> subtractTaxFreeIncome gender
+    |> calcTaxAfterRebate investments
+    |> applyAIT maybeAIT
+    |> mapTaxOutput
 
 let calcTax taxInput =
     taxOutput
