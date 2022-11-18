@@ -12,7 +12,7 @@ let inline ``%`` a b = b * (a / 100m)
 let config = {|
     TaxFreeIncome = {|
         Male   = 3_00_000m
-        Female = 4_00_000m
+        Female = 3_50_000m
     |}
     
     HouseRentExemption = {|
@@ -218,9 +218,9 @@ let validateAit ait =
     | _ when ait < 0m -> ait |> NegativeAit |> Error
     | _               -> Ok ()
     
-let (>=>) switch1 switch2 =
-    match switch1 with
-    | Ok _      -> switch2 
+let (>=>) prev it =
+    match prev with
+    | Ok _      -> it 
     | Error err -> Error err
     
 let calculateTax
@@ -235,14 +235,14 @@ let calculateTax
         (deposit:            decimal)
         (ait:                decimal)
         : Result<TaxOutput, TaxCalculationError> =
-    (validateIncome Basic basicIncome)
-    >=> (validateIncome HouseRentAllowance houseRentAllowance)
-    >=> (validateIncome MedicalAllowance medicalAllowance)
-    >=> (validateIncome Conveyance conveyance)
-    >=> (validateIncome Bonus bonus)
-    >=> (validateInvestment SavingsBond savingsBond)
-    >=> (validateInvestment Deposit deposit)
-    >=> (validateAit ait)
+    validateIncome Basic basicIncome
+    >=> validateIncome HouseRentAllowance houseRentAllowance
+    >=> validateIncome MedicalAllowance medicalAllowance
+    >=> validateIncome Conveyance conveyance
+    >=> validateIncome Bonus bonus
+    >=> validateInvestment SavingsBond savingsBond
+    >=> validateInvestment Deposit deposit
+    >=> validateAit ait
     >=> (
             {
                 Gender = gender
