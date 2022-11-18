@@ -3,18 +3,11 @@
 open System
 
 let inline (|-|) a b =
-    if a > b then a - b
-    else          0m
+    match a > b with
+    | true -> a - b
+    | false -> 0m
 
-let nPercent n = n / 100m
-let nPercentOf n value = value * nPercent n
-let ``05%`` = nPercentOf 5m
-let ``10%`` = nPercentOf 10m
-let ``15%`` = nPercentOf 15m
-let ``20%`` = nPercentOf 20m
-let ``25%`` = nPercentOf 25m
-let ``30%`` = nPercentOf 30m
-let ``50%`` = nPercentOf 50m
+let ``%`` (a: decimal) (b: decimal) = b * (a / 100m)
 
 let config = {|
     TaxFreeIncome                      = {|
@@ -31,25 +24,29 @@ let config = {|
         Forth  = 5_00_000m
         Fifth  = Decimal.MaxValue
     |}
-    MaxRebateOnDeposit                 = 60_000m
-    InvestableIncomePercentage         = ``30%``
-    RebateOnMaxAllowedInvestment = ``15%``
+    MaxRebateOnDeposit           = 60_000m
+    InvestableIncomePercentage   = 30m |> ``%``
+    RebateOnMaxAllowedInvestment = 15m |> ``%``
 |}
 
 type Gender =
 | Male
 | Female
 
-type Income =
-| Basic              of decimal
-| MedicalAllowance   of decimal
-| HouseRentAllowance of decimal
-| Conveyance         of decimal
-| Bonus              of decimal
+type IncomeType =
+| Basic
+| MedicalAllowance
+| HouseRentAllowance
+| Conveyance
+| Bonus
 
-type Investment =
-| SavingsBond of decimal
-| Deposit     of decimal
+type Income = Income of Amount: decimal * IncomeType
+
+type InvestmentType =
+| SavingsBond
+| Deposit
+
+type Investment = Investment of Amount: decimal * InvestmentType
 
 type AIT =
 | AIT of decimal
@@ -68,19 +65,21 @@ type TaxOutput =
 | Refundable of decimal
 
 let mapTaxOutput taxAmount =
-    if taxAmount = 0m   then Zero
-    elif taxAmount > 0m then taxAmount |> Liability
-    else                     taxAmount |> abs |> Refundable
+    match taxAmount with
+    | 0m -> Zero
+    | amount when amount > 0m -> taxAmount |> Liability
+    | amount when amount < 0m -> taxAmount |> Refundable
+    | _ -> failwith "Unreachable"
 
 let houseRentExemption basic houseRent =
     basic
-    |> ``50%``
+    |> (50m |> ``%``)
     |> min config.MaxHouseRentExemptionPerYear
     |> min houseRent
 
 let medicalAllowanceExemption basic medicalAllowance =
     basic
-    |> ``10%``
+    |> (10m |> ``%``)
     |> min config.MaxMedicalExemptionPerYear
     |> min medicalAllowance
 
@@ -90,26 +89,26 @@ let taxFreeIncome = function
 | Male   -> config.TaxFreeIncome.Male
 | Female -> config.TaxFreeIncome.Female
 
-let taxableIncome income =
-    let (basic, houseRent, medical, conveyance, bonus) =
+let getTaxableIncome (income: List<Income>) =
+    let basic, houseRent, medical, conveyance, bonus =
         ((0m, 0m, 0m, 0m, 0m), income)
         ||> List.fold
             (fun (basic, houseRent, medical, conveyance, bonus) ->
                 function
-                | Basic b ->
-                    (basic + b, houseRent, medical, conveyance, bonus)
+                | Income (amt, Basic) ->
+                    (basic + amt, houseRent, medical, conveyance, bonus)
 
-                | HouseRentAllowance hr ->
-                    (basic, houseRent + hr, medical, conveyance, bonus)
+                | Income (amt, HouseRentAllowance) ->
+                    (basic, houseRent + amt, medical, conveyance, bonus)
 
-                | MedicalAllowance m ->
-                    (basic, houseRent, medical + m, conveyance, bonus)
+                | Income (amt, MedicalAllowance) ->
+                    (basic, houseRent, medical + amt, conveyance, bonus)
 
-                | Conveyance c ->
-                    (basic, houseRent, medical, conveyance + c, bonus)
+                | Income (amt, Conveyance) ->
+                    (basic, houseRent, medical, conveyance + amt, bonus)
 
-                | Bonus b ->
-                    (basic, houseRent, medical, conveyance, bonus + b)
+                | Income (amt, Bonus) ->
+                    (basic, houseRent, medical, conveyance, bonus + amt)
             )
 
     basic
@@ -123,16 +122,16 @@ type TaxBracket =
 
 let BdTaxBrackets =
     [
-        (config.TaxBracketWidths.First,  ``05%``)
-        (config.TaxBracketWidths.Second, ``10%``)
-        (config.TaxBracketWidths.Third,  ``15%``)
-        (config.TaxBracketWidths.Forth,  ``20%``)
-        (config.TaxBracketWidths.Fifth,  ``25%``)
+        (config.TaxBracketWidths.First,  5m |> ``%``)
+        (config.TaxBracketWidths.Second, 10m |> ``%``)
+        (config.TaxBracketWidths.Third,  15m |> ``%``)
+        (config.TaxBracketWidths.Forth,  20m |> ``%``)
+        (config.TaxBracketWidths.Fifth,  25m |> ``%``)
     ]
     |> List.map TaxBracket
 
 let calcTaxBeforeRebate taxableIncome =
-    (((taxableIncome), 0m), BdTaxBrackets)
+    ((taxableIncome, 0m), BdTaxBrackets)
     ||> List.fold
         (fun (income, taxAmount) ->
             function
@@ -147,13 +146,13 @@ let calcTaxBeforeRebate taxableIncome =
         )
     |> snd
 
-let rebateOnInvestment investments taxableIncome =
+let rebateOnInvestment (investments: List<Investment>) taxableIncome =
     ((0m, 0m), investments)
     ||> List.fold
         (fun (bond, deposit) ->
             function
-            | SavingsBond b -> (bond + b, deposit)
-            | Deposit d     -> (bond, deposit + d)
+            | Investment (amt, SavingsBond) -> (bond + amt, deposit)
+            | Investment (amt, Deposit)     -> (bond, deposit + amt)
         )
     |> fun (bond, deposits) ->
         deposits
@@ -162,7 +161,7 @@ let rebateOnInvestment investments taxableIncome =
     |> min (taxableIncome |> config.InvestableIncomePercentage)
     |> config.RebateOnMaxAllowedInvestment
 
-let applyRebate taxableIncome investments taxAmount =
+let applyRebate taxableIncome (investments: List<Investment>) taxAmount =
     taxAmount - (rebateOnInvestment investments taxableIncome)
 
 let applyAIT maybeAIT taxAmount =
@@ -170,7 +169,7 @@ let applyAIT maybeAIT taxAmount =
     | Some (AIT ait) -> taxAmount - ait
     | None           -> taxAmount
 
-let calcTaxAfterRebate investments taxableIncome =
+let calcTaxAfterRebate (investments: List<Investment>) taxableIncome =
     taxableIncome
     |> calcTaxBeforeRebate
     |> applyRebate taxableIncome investments
@@ -178,50 +177,39 @@ let calcTaxAfterRebate investments taxableIncome =
 let subtractTaxFreeIncome gender taxableIncome =
     taxableIncome |-| (taxFreeIncome gender)
 
-let taxOutput income investments maybeAIT gender =
-    income
-    |> taxableIncome
-    |> subtractTaxFreeIncome gender
-    |> calcTaxAfterRebate investments
-    |> applyAIT maybeAIT
+let calcTax taxInput =
+    taxInput.Income
+    |> getTaxableIncome
+    |> subtractTaxFreeIncome taxInput.Gender
+    |> calcTaxAfterRebate taxInput.Investments
+    |> applyAIT taxInput.MaybeAIT
     |> mapTaxOutput
 
-let calcTax taxInput =
-    taxOutput
-        taxInput.Income
-        taxInput.Investments
-        taxInput.MaybeAIT
-        taxInput.Gender
-
 let calculateTax
-        (gender: string)
-        minimumTaxInArea
-        basicIncome
-        houseRentAllowance
-        medicalAllowance
-        conveyance
-        bonus
-        savingsBond
-        deposit
-        ait =
+        (gender:             Gender)
+        (minimumTaxInArea:   decimal)
+        (basicIncome:        decimal)
+        (houseRentAllowance: decimal)
+        (medicalAllowance:   decimal)
+        (conveyance:         decimal)
+        (bonus:              decimal)
+        (savingsBond:        decimal)
+        (deposit:            decimal)
+        (ait:                decimal) =
     calcTax {
-        Gender =
-            match gender.ToUpper() with
-            | "MALE"   | "M" -> Male
-            | "FEMALE" | "F" -> Female
-            | _              -> failwith $"Unsupported Gender: {gender}"
+        Gender = gender
 
         Income = [
-            basicIncome        |> Basic
-            houseRentAllowance |> HouseRentAllowance
-            medicalAllowance   |> MedicalAllowance
-            conveyance         |> Conveyance
-            bonus              |> Bonus
+            Income (basicIncome, Basic)
+            Income (houseRentAllowance, HouseRentAllowance)
+            Income (medicalAllowance, MedicalAllowance)
+            Income (conveyance, Conveyance)
+            Income (bonus, Bonus)
         ]
 
         Investments = [
-            savingsBond |> SavingsBond
-            deposit     |> Deposit
+            Investment (savingsBond, SavingsBond)
+            Investment (deposit, Deposit)
         ]
 
         MinimumTaxInArea = minimumTaxInArea
@@ -229,6 +217,6 @@ let calculateTax
         MaybeAIT =
             match ait with
             | 0m                  -> None
-            | ait' when ait' > 0m -> ait' |> AIT |> Some
+            | ait when ait > 0m -> ait |> AIT |> Some
             | _                   -> failwith $"Incorrect AIT Amount {ait}"
     }
