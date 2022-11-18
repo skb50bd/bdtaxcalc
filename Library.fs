@@ -52,20 +52,19 @@ let mapTaxOutput taxAmount =
     elif taxAmount > 0m then taxAmount |> Liability
     else                     taxAmount |> abs |> Refundable
 
-let houseRentExemption basic houseRent=
+let houseRentExemption basic houseRent =
     basic
     |> ``50%``
     |> min 3_00_000m
     |> min houseRent
 
-let medicalAllowanceExemption basic medicalAllowance=
+let medicalAllowanceExemption basic medicalAllowance =
     basic
     |> ``10%``
     |> min 1_20_000m
     |> min medicalAllowance
 
-let conveyanceExemption conveyance =
-    min conveyance 30_000m
+let conveyanceExemption conveyance = min conveyance 30_000m
 
 let taxFreeIncome = function
 | Male   -> 3_00_000m
@@ -126,10 +125,7 @@ let calcTaxBeforeRebate taxableIncome =
         )
     |> snd
 
-let rebateOnInvestment
-        (investments: list<Investment>)
-        (taxableIncome: decimal)
-        : decimal =
+let rebateOnInvestment investments taxableIncome =
     ((0m, 0m), investments)
     ||> List.fold
         (fun (bond, deposit) ->
@@ -142,17 +138,13 @@ let rebateOnInvestment
     |> min (taxableIncome * 0.3m)
     |> (*) 0.15m
 
-let applyRebate
-        taxableIncome
-        investments
-        taxAmount =
-    taxAmount
-    - rebateOnInvestment investments taxableIncome
+let applyRebate taxableIncome investments taxAmount =
+    taxAmount - (rebateOnInvestment investments taxableIncome)
 
 let applyAIT maybeAIT taxAmount =
     match maybeAIT with
     | Some (AIT ait) -> taxAmount - ait
-    | None -> taxAmount
+    | None           -> taxAmount
 
 let taxOutput income investments maybeAIT gender =
     (taxableIncome income) |-| (taxFreeIncome gender)
@@ -184,7 +176,7 @@ let calculateTax
     calcTax {
         Gender =
             match gender.ToUpper() with
-            | "MALE" | "M"   -> Male
+            | "MALE"   | "M" -> Male
             | "FEMALE" | "F" -> Female
             | _              -> failwith $"Unsupported Gender: {gender}"
 
@@ -205,8 +197,7 @@ let calculateTax
 
         MaybeAIT =
             match ait with
-            | 0m -> None
+            | 0m                  -> None
             | ait' when ait' > 0m -> ait' |> AIT |> Some
-            | _ -> failwith $"Incorrect AIT Amount {ait}"
+            | _                   -> failwith $"Incorrect AIT Amount {ait}"
     }
-
