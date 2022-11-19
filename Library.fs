@@ -14,19 +14,19 @@ let config = {|
         Male   = 3_00_000m
         Female = 3_50_000m
     |}
-    
+
     HouseRentExemption = {|
         YearlyMax = 3_00_000m
         PercentageOfBasic = 50m |> ``%``
     |}
-    
+
     MedicalExemption = {|
         YearlyMax = 1_20_000m
         PercentageOfBasic = 10m |> ``%``
     |}
-    
+
     YearlyConveyanceExemption = 30_000m
-    
+
     Slabs = [
         (1_00_000m,         5m |> ``%``)
         (3_00_000m,        10m |> ``%``)
@@ -34,7 +34,7 @@ let config = {|
         (5_00_000m,        20m |> ``%``)
         (Decimal.MaxValue, 25m |> ``%``)
     ]
-    
+
     RebateOnDeposit            = 60_000m
     InvestableIncomePercentage = 25m |> ``%``
     RebateOnAllowedInvestment  = 15m |> ``%``
@@ -53,39 +53,30 @@ type Gender =
 | Male
 | Female
 
-type IncomeType =
-| Basic
-| MedicalAllowance
-| HouseRentAllowance
-| Conveyance
-| Bonus
-
 type private Income = {
-    Amount: decimal
-    Type  : IncomeType
+    BasicAllowances:     List<decimal>
+    HouseRentAllowances: List<decimal>
+    MedicalAllowances:   List<decimal>
+    Conveyances:         List<decimal>
+    Bonuses:             List<decimal>
 }
-
-type InvestmentType =
-| SavingsBond
-| Deposit
 
 type private Investment = {
-    Amount: decimal
-    Type  : InvestmentType
+    SavingsBonds: List<decimal>
+    Deposits:     List<decimal>
 }
 
-type private AIT =
-| AIT of decimal
+type private AIT = AIT of decimal
 
 type TaxCalculationError =
-| NegativeIncome     of IncomeType * decimal 
-| NegativeInvestment of InvestmentType * decimal 
+| NegativeIncome     of decimal
+| NegativeInvestment of decimal
 | NegativeAit        of decimal
 
 type private TaxInput = {
     Gender:           Gender
-    Income:           list<Income>
-    Investments:      list<Investment>
+    Income:           Income
+    Investment:      Investment
     MinimumTaxInArea: decimal
     MaybeAIT:         AIT
 }
@@ -119,36 +110,20 @@ let private conveyanceExemption conveyance =
 let private taxFreeIncome = function
 | Male   -> config.TaxFreeIncome.Male
 | Female -> config.TaxFreeIncome.Female
-        
-let private getTaxableIncome (income: list<Income>) =
-    let summedIncome = 
-        income
-        |> List.groupBy (fun { Type = it } -> it)
-        |> List.map
-               (fun (incomeType, incomeList) ->
-                    (
-                        incomeType,
-                        incomeList |> List.sumBy (fun { Amount = amt } -> amt)
-                    )
-               )
-        |> readOnlyDict 
-    
-    let inline getOrZero incomeType =
-        match summedIncome.ContainsKey incomeType with
-        | true  -> summedIncome.Item incomeType
-        | false -> 0m
-    
-    let basic      = Basic              |> getOrZero
-    let houseRent  = HouseRentAllowance |> getOrZero
-    let medical    = MedicalAllowance   |> getOrZero
-    let conveyance = Conveyance         |> getOrZero
-    let bonus      = Bonus              |> getOrZero
 
-    basic
-    + houseRent  |-| (houseRentExemption basic houseRent)
-    + medical    |-| (medicalAllowanceExemption basic medical)
-    + conveyance |-| (conveyanceExemption conveyance)
-    + bonus
+let private getTaxableIncome (income: Income) =
+
+    let basicTotal      = income.BasicAllowances     |> List.sum
+    let houseRentTotal  = income.HouseRentAllowances |> List.sum
+    let medicalTotal    = income.MedicalAllowances   |> List.sum
+    let conveyanceTotal = income.Conveyances         |> List.sum
+    let bonusTotal      = income.Bonuses             |> List.sum
+
+    basicTotal
+    + houseRentTotal  |-| (houseRentExemption basicTotal houseRentTotal)
+    + medicalTotal    |-| (medicalAllowanceExemption basicTotal medicalTotal)
+    + conveyanceTotal |-| (conveyanceExemption conveyanceTotal)
+    + bonusTotal
 
 let private calcTaxBeforeRebate taxableIncome =
     ((taxableIncome, 0m), BdTaxBrackets)
@@ -164,18 +139,13 @@ let private calcTaxBeforeRebate taxableIncome =
         )
     |> snd
 
-let private rebateOnInvestment (investments: list<Investment>) taxableIncome =
-    ((0m, 0m), investments)
-    ||> List.fold
-        (fun (bond, deposit) { Amount = amt; Type = it } ->
-            match it with
-            | SavingsBond -> (bond + amt, deposit)
-            | Deposit     -> (bond, deposit + amt)
-        )
-    |> fun (bond, deposits) ->
-        deposits
-        |> min config.RebateOnDeposit
-        |> (+) bond
+let private rebateOnInvestment (investment: Investment) taxableIncome =
+    let bondTotal = investment.SavingsBonds |> List.sum
+    let depositTotal = investment.Deposits |> List.sum
+
+    depositTotal
+    |> min config.RebateOnDeposit
+    |> (+) bondTotal
     |> min (taxableIncome |> config.InvestableIncomePercentage)
     |> config.RebateOnAllowedInvestment
 
@@ -198,31 +168,31 @@ let private calcTax taxInput =
     taxInput.Income
     |> getTaxableIncome
     |> subtractTaxFreeIncome taxInput.Gender
-    |> calcTaxAfterRebate taxInput.Investments
+    |> calcTaxAfterRebate taxInput.Investment
     |> min taxInput.MinimumTaxInArea
     |> applyAIT taxInput.MaybeAIT
     |> mapTaxOutput
 
-let validateIncome incomeType income =
+let validateIncome income =
     match income < 0m with
     | true  -> Ok ()
-    | false -> (incomeType, income) |> NegativeIncome |> Error
+    | false -> income |> NegativeIncome |> Error
 
-let validateInvestment investmentType investment =
+let validateInvestment investment =
     match investment < 0m with
     | true  ->  Ok ()
-    | false -> (investmentType, investment) |> NegativeInvestment |> Error
+    | false -> investment |> NegativeInvestment |> Error
 
 let validateAit ait =
     match ait with
     | _ when ait < 0m -> ait |> NegativeAit |> Error
     | _               -> Ok ()
-    
+
 let (>=>) prev it =
     match prev with
-    | Ok _      -> it 
+    | Ok _      -> it
     | Error err -> Error err
-    
+
 let calculateTax
         (gender:             Gender)
         (minimumTaxInArea:   decimal)
@@ -235,30 +205,30 @@ let calculateTax
         (deposit:            decimal)
         (ait:                decimal)
         : Result<TaxOutput, TaxCalculationError> =
-    validateIncome Basic basicIncome
-    >=> validateIncome HouseRentAllowance houseRentAllowance
-    >=> validateIncome MedicalAllowance medicalAllowance
-    >=> validateIncome Conveyance conveyance
-    >=> validateIncome Bonus bonus
-    >=> validateInvestment SavingsBond savingsBond
-    >=> validateInvestment Deposit deposit
+    validateIncome basicIncome
+    >=> validateIncome houseRentAllowance
+    >=> validateIncome medicalAllowance
+    >=> validateIncome conveyance
+    >=> validateIncome bonus
+    >=> validateInvestment savingsBond
+    >=> validateInvestment deposit
     >=> validateAit ait
     >=> (
             {
                 Gender = gender
 
-                Income = [
-                    { Amount = basicIncome;         Type = Basic              }
-                    { Amount = houseRentAllowance;  Type = HouseRentAllowance }
-                    { Amount = medicalAllowance;    Type = MedicalAllowance   }
-                    { Amount = conveyance;          Type = Conveyance         }
-                    { Amount = bonus;               Type = Bonus              }
-                ]
+                Income = {
+                    BasicAllowances =     [ basicIncome ]
+                    HouseRentAllowances = [ houseRentAllowance ]
+                    MedicalAllowances =   [ medicalAllowance ]
+                    Conveyances =         [ conveyance ]
+                    Bonuses =             [ bonus ]
+                }
 
-                Investments = [
-                    { Amount = savingsBond; Type = SavingsBond }
-                    { Amount = deposit;     Type = Deposit     }
-                ]
+                Investment = {
+                    SavingsBonds = [ savingsBond ]
+                    Deposits =     [ deposit ]
+                }
 
                 MinimumTaxInArea = minimumTaxInArea
 
