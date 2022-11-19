@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "BdTaxCalculator.Library.Tests", "BdTaxCalculator.Library.Tests\BdTaxCalculator.Library.Tests.fsproj", "{9038290D-341C-4CE7-89F4-F8D865DB1A37}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "BdTaxCalculator.Library", "BdTaxCalculator.Library\BdTaxCalculator.Library.fsproj", "{6D20D03C-4BF9-4E15-9942-5924A16739B6}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Files", "Solution Files", "{6F840781-CA27-4AE7-A1F6-5D715DBDA49B}"
+	ProjectSection(SolutionItems) = preProject
+		global.json = global.json
+		.gitignore = .gitignore
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9038290D-341C-4CE7-89F4-F8D865DB1A37}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9038290D-341C-4CE7-89F4-F8D865DB1A37}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9038290D-341C-4CE7-89F4-F8D865DB1A37}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9038290D-341C-4CE7-89F4-F8D865DB1A37}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D20D03C-4BF9-4E15-9942-5924A16739B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D20D03C-4BF9-4E15-9942-5924A16739B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D20D03C-4BF9-4E15-9942-5924A16739B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D20D03C-4BF9-4E15-9942-5924A16739B6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
