@@ -173,7 +173,6 @@ let private taxFreeIncome = function
 | Female -> config.TaxFreeIncome.Female
         
 let private getTaxableIncome (income: Income) =
-
     let basicTotal      = income.BasicAllowances     |> List.sum
     let houseRentTotal  = income.HouseRentAllowances |> List.sum
     let medicalTotal    = income.MedicalAllowances   |> List.sum
