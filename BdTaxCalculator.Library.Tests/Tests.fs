@@ -1,6 +1,6 @@
-module Tests
+module BdTaxCalculator.Library.Tests
 
-open BdTaxCalculator.Library.Money
+open Model
 open Xunit
     
 type NonNegativeSubtractionTestInput = {
@@ -13,19 +13,19 @@ type private NonNegativeSubtractionTestData() as this =
     inherit TheoryData<NonNegativeSubtractionTestInput>()
     do
         this.Add {
-            A = 1m |> money
-            B = 2m |> money
-            Expected = 0m |> money
+            A = 1m |> Money.fromDecimal
+            B = 2m |> Money.fromDecimal
+            Expected = 0m |> Money.fromDecimal
         }
         this.Add {
-            A = 2m |> money
-            B = 2m |> money
-            Expected = 0m |> money
+            A = 2m |> Money.fromDecimal
+            B = 2m |> Money.fromDecimal
+            Expected = 0m |> Money.fromDecimal
         }
         this.Add {
-            A = 2m |> money
-            B = 1m |> money
-            Expected = 1m |> money
+            A = 2m |> Money.fromDecimal
+            B = 1m |> Money.fromDecimal
+            Expected = 1m |> Money.fromDecimal
         }
     
 [<Theory>]
@@ -33,5 +33,5 @@ type private NonNegativeSubtractionTestData() as this =
 let ``Non-Negative Subtraction Works`` (input: NonNegativeSubtractionTestInput) =
     Assert.Equal(
         input.Expected,
-        input.A - input.B
+        input.A |-| input.B
     )

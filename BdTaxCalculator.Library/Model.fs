@@ -1,7 +1,59 @@
 ﻿module BdTaxCalculator.Library.Model
 
 open System
-open Money
+
+[<Struct>]
+[<CustomComparison>]
+[<CustomEquality>]
+type Money = private Money of decimal with
+    member this.Value =
+        match this with Money amt -> amt
+        
+    override this.GetHashCode () = this.Value.GetHashCode()
+
+    override this.Equals obj =
+        match obj with
+        | :? Money as other -> this.Value = other.Value
+        | _                 -> false
+
+    interface IComparable with
+        member this.CompareTo obj =
+            match obj with
+            | :? Money as other -> this.Value.CompareTo other.Value
+            | _                 -> -1
+
+    static member (+) (left, right) =
+        match (left, right) with
+        | (Money l, Money r) -> l + r |> Money
+
+    static member (-) (left, right) =
+        match (left, right) with
+        | (Money l, Money r) -> l - r
+        |> Money
+        
+    static member (|-|) (left, right) =
+        match (left, right) with
+        | (Money l, Money r) when l > r -> l - r |> Money
+        | _                             -> 0m    |> Money
+        
+    static member (%) (percent: decimal, amount: Money) =
+        match amount with
+            | Money amt -> (percent * amt) |> Money
+    
+    static member Zero = 0m |> Money
+    static member MaxValue = Decimal.MaxValue |> Money
+    static member MinValue = Decimal.MinValue |> Money
+        
+module Money = 
+    let maybeFromDecimal value =
+        match value < 0m with
+        | false -> value |> Money |> Some
+        | true  -> None
+        
+    let fromDecimal value =
+        match maybeFromDecimal value with
+        | Some m -> m
+        | None   -> failwith $"Money must be non-negative: {value}"
 
 type Slab = {
     Width: Money
@@ -31,34 +83,34 @@ type Config = {
 
 let config = {
     TaxFreeIncome = {
-        Male   = 3_00_000m |> money
-        Female = 3_50_000m |> money
+        Male   = 3_00_000m |> Money.fromDecimal
+        Female = 3_50_000m |> Money.fromDecimal
     }
     
     HouseRentExemption = {
-        YearlyMax = 3_00_000m |> money
+        YearlyMax = 3_00_000m |> Money.fromDecimal
         FromBasic = 50m |> (%)
     }
     
     MedicalExemption = {
-        YearlyMax = 1_20_000m |> money
+        YearlyMax = 1_20_000m |> Money.fromDecimal
         FromBasic = 10m |> (%)
     }
     
     ConveyanceExemption = {
-        YearlyMax = 30_000m |> money
+        YearlyMax = 30_000m |> Money.fromDecimal
         FromBasic = 100m |> (%)
     }
     
     Slabs = [
-        { Width = 1_00_000m        |> money; Rate =  5m |> (%) }
-        { Width = 3_00_000m        |> money; Rate = 10m |> (%) }
-        { Width = 4_00_000m        |> money; Rate = 15m |> (%) }
-        { Width = 5_00_000m        |> money; Rate = 20m |> (%) }
-        { Width = Decimal.MaxValue |> money; Rate = 25m |> (%) }
+        { Width = 1_00_000m        |> Money.fromDecimal; Rate =  5m |> (%) }
+        { Width = 3_00_000m        |> Money.fromDecimal; Rate = 10m |> (%) }
+        { Width = 4_00_000m        |> Money.fromDecimal; Rate = 15m |> (%) }
+        { Width = 5_00_000m        |> Money.fromDecimal; Rate = 20m |> (%) }
+        { Width = Decimal.MaxValue |> Money.fromDecimal; Rate = 25m |> (%) }
     ]
     
-    RebateOnDeposit            = 60_000m |> money
+    RebateOnDeposit            = 60_000m |> Money.fromDecimal
     InvestableIncome           = 25m |> (%)
     RebateOnAllowedInvestment  = 15m |> (%)
 }
@@ -165,8 +217,8 @@ let private applyAIT ait taxAmount =
     match (ait, taxAmount) with
     | (AIT (Money ait), (Money tax)) ->
         if   ait = tax then Zero
-        elif ait < tax then (tax - ait) |> money |> Liability
-        else                (ait - tax) |> money |> Refundable
+        elif ait < tax then (tax - ait) |> Money.fromDecimal |> Liability
+        else                (ait - tax) |> Money.fromDecimal |> Refundable
         
 let private calcTaxAfterRebate investments taxableIncome =
     taxableIncome
@@ -204,8 +256,7 @@ let validateAit ait =
     | _ when ait < 0m -> ait |> NegativeAit |> Error
     | _               -> Ok ()
     
-let (>=>) prev it =
-    prev |> Result.bind (fun _ -> it)
+let (>=>) prev it = prev |> Result.bind (fun _ -> it)
 
 let calculateTax
         (gender:             Gender)
@@ -228,26 +279,26 @@ let calculateTax
     >=> validateInvestment deposit
     >=> validateAit ait
     >=> (
-            {
-                Gender = gender
+        {
+            Gender = gender
 
-                Income = {
-                    BasicAllowances =     [ basicIncome |> money ]
-                    HouseRentAllowances = [ houseRentAllowance |> money ]
-                    MedicalAllowances =   [ medicalAllowance |> money ]
-                    Conveyances =         [ conveyance |> money ]
-                    Bonuses =             [ bonus |> money ]
-                }
-
-                Investments = {
-                    SavingsBonds = [ savingsBond |> money ]
-                    Deposits =     [ deposit |> money ]
-                }
-
-                MinimumTaxInArea = money minimumTaxInArea
-
-                MaybeAIT = ait |> money |> AIT
+            Income = {
+                BasicAllowances =     [ basicIncome        |> Money.fromDecimal ]
+                HouseRentAllowances = [ houseRentAllowance |> Money.fromDecimal ]
+                MedicalAllowances =   [ medicalAllowance   |> Money.fromDecimal ]
+                Conveyances =         [ conveyance         |> Money.fromDecimal ]
+                Bonuses =             [ bonus              |> Money.fromDecimal ]
             }
-            |> calcTax
-            |> Ok
+
+            Investments = {
+                SavingsBonds = [ savingsBond |> Money.fromDecimal ]
+                Deposits =     [ deposit     |> Money.fromDecimal ]
+            }
+
+            MinimumTaxInArea = Money.fromDecimal minimumTaxInArea
+
+            MaybeAIT = ait |> Money.fromDecimal |> AIT
+        }
+        |> calcTax
+        |> Ok
     )
