@@ -9,7 +9,7 @@ open Shared.Model
 
 let testParamsMany label xs tests =
   xs
-  |> List.collect (fun x -> tests|> List.map (fun test -> test x))
+  |> List.collect (fun x -> tests |> List.map (fun test -> test x))
   |> testList label
 
 let testParams label xs test =
@@ -32,13 +32,11 @@ let moneyOperations =
                 |}
             ]
             (fun input ->
-                testCase
-                    $"{input.Left} + {input.Right} = {input.Expected}"
-                    <| fun _ ->
-                        Expect.equal
-                            (input.Left + input.Right)
-                            (input.Expected)
-                            "Should be Equal"
+                testCase $"{input.Left} + {input.Right} = {input.Expected}" <| fun _ ->
+                    Expect.equal
+                        (input.Left + input.Right)
+                        (input.Expected)
+                        "Should be Equal"
             )
 
         testParams
@@ -61,13 +59,11 @@ let moneyOperations =
                 |}
             ]
             (fun input ->
-                testCase
-                    $"{input.Left} - {input.Right} = {input.Expected}"
-                    <| fun _ ->
-                        Expect.equal
-                            (input.Left - input.Right).Value
-                            (input.Expected)
-                            "Should be Equal"
+                testCase $"{input.Left} - {input.Right} = {input.Expected}" <| fun _ ->
+                    Expect.equal
+                        (input.Left - input.Right).Value
+                        (input.Expected)
+                        "Should be Equal"
             )
 
         testParams
@@ -90,13 +86,11 @@ let moneyOperations =
                 |}
             ]
             (fun input ->
-                testCase
-                    $"{input.Left} |-| {input.Right} = {input.Expected}"
-                    <| fun _ ->
-                        Expect.equal
-                            (input.Left |-| input.Right)
-                            (input.Expected)
-                            "Should be Equal"
+                testCase $"{input.Left} |-| {input.Right} = {input.Expected}" <| fun _ ->
+                    Expect.equal
+                        (input.Left |-| input.Right)
+                        (input.Expected)
+                        "Should be Equal"
             )
 
         testParams
@@ -119,48 +113,40 @@ let moneyOperations =
                 |}
             ]
             (fun input ->
-                testCase
-                    $"{input.Percentage}%% of {input.Amount} = {input.Expected}"
-                    <| fun _ ->
-                        Expect.equal
-                            (input.Percentage %% input.Amount)
-                            (input.Expected)
-                            "Should be Equal"
+                testCase $"{input.Percentage}%% of {input.Amount} = {input.Expected}" <| fun _ ->
+                    Expect.equal
+                        (input.Percentage %% input.Amount)
+                        (input.Expected)
+                        "Should be Equal"
             )
 
-        testCase
-            "Cannot Create Negative Money"
-            <| fun _ ->
-                Expect.throws
-                    (fun _ -> -1m |> Money.fromDecimal |> ignore)
-                    "Should Throw"
+        testCase "Cannot Create Negative Money" <| fun _ ->
+            Expect.throws
+                (fun _ -> -1m |> Money.fromDecimal |> ignore)
+                "Should Throw"
 
-        testCase
-            "Create Money with Correct Value"
-            <| fun _ ->
-                Expect.equal
-                    (11.123m |> Money.fromDecimal |> fun x -> x.Value)
-                    (11.123m)
-                    "Should be Equal"
+        testCase "Create Money with Correct Value" <| fun _ ->
+            Expect.equal
+                (11.123m |> Money.fromDecimal |> fun x -> x.Value)
+                (11.123m)
+                "Should be Equal"
 
-                Expect.equal
-                    (11m |> Money.fromDecimal |> fun x -> x.Value)
-                    (11m)
-                    "Should be Equal"
+            Expect.equal
+                (11m |> Money.fromDecimal |> fun x -> x.Value)
+                (11m)
+                "Should be Equal"
 
-        testCase
-            "Comparison"
-            <| fun _ ->
-                Expect.isTrue
-                    ((2m |> Money.fromDecimal) > (1m |> Money.fromDecimal))
-                    "Greater Than"
+        testCase "Comparison" <| fun _ ->
+            Expect.isTrue
+                ((2m |> Money.fromDecimal) > (1m |> Money.fromDecimal))
+                "Greater Than"
 
-                Expect.isTrue
-                    ((2m |> Money.fromDecimal) < (3m |> Money.fromDecimal))
-                    "Less Than"
+            Expect.isTrue
+                ((2m |> Money.fromDecimal) < (3m |> Money.fromDecimal))
+                "Less Than"
 
-                Expect.equal
-                    (2m |> Money.fromDecimal)
-                    (2m |> Money.fromDecimal)
-                    "Equal"
+            Expect.equal
+                (2m |> Money.fromDecimal)
+                (2m |> Money.fromDecimal)
+                "Equal"
     ]

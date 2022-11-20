@@ -19,7 +19,6 @@ let server = testList "Server" [
 let all =
     testList "All"
         [
-            Shared.Tests.Dummy.shared
             Shared.Tests.Money.moneyOperations
             server
         ]

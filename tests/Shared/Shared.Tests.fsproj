@@ -3,11 +3,10 @@
         <TargetFramework>net6.0</TargetFramework>
     </PropertyGroup>
     <ItemGroup>
-        <Compile Include="MoneyTests.fs"/>
-        <Compile Include="Shared.Tests.fs"/>
+        <Compile Include="MoneyTests.fs" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Shared\Shared.fsproj"/>
+        <ProjectReference Include="..\..\src\Shared\Shared.fsproj" />
     </ItemGroup>
-    <Import Project="..\..\.paket\Paket.Restore.targets"/>
+    <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
